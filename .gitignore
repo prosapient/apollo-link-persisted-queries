@@ -48,6 +48,7 @@ jspm_packages
 
 # Compiled
 dist
-lib
+# lib // need this to host build on github
+# lib
 
 .idea

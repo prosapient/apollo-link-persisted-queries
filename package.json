@@ -102,6 +102,5 @@
       "git add"
     ],
     "*.json*": ["prettier --write", "git add"]
-  },
-  "pre-commit": "lint-staged"
+  }
 }
