@@ -13,6 +13,7 @@ const makeAliasFields = (fieldName, numAliases) =>
   );
 
 const sleep = ms => new Promise(s => setTimeout(s, ms));
+
 export const query = gql`
   query Test($id: ID!) {
     foo(id: $id) {
@@ -73,6 +74,7 @@ const mockErroredLink = new ApolloLink(() => new Observable(mockErrorObserver));
 
 describe('happy path', () => {
   beforeEach(fetch.mockReset);
+
   it('sends a sha256 hash of the query under extensions', done => {
     fetch.mockResponseOnce(response);
     const link = createPersistedQuery().concat(createHttpLink());
@@ -96,6 +98,7 @@ describe('happy path', () => {
       done();
     }, done.fail);
   });
+
   it('sends a version along with the request', done => {
     fetch.mockResponseOnce(response);
     const link = createPersistedQuery().concat(createHttpLink());
@@ -128,6 +131,7 @@ describe('happy path', () => {
       }, done.fail);
     }, done.fail);
   });
+
   it('supports loading the hash from other method', done => {
     fetch.mockResponseOnce(response);
     const generateHash = query => query.documentId + 'foo';
@@ -157,6 +161,7 @@ describe('happy path', () => {
       done();
     });
   });
+
   it('unsubscribes correctly', done => {
     const delay = new ApolloLink(() => {
       return new Observable(ob => {
@@ -180,8 +185,10 @@ describe('happy path', () => {
     }, 10);
   });
 });
+
 describe('failure path', () => {
   beforeEach(fetch.mockReset);
+
   it('correctly identifies the error shape from the server', done => {
     fetch.mockResponseOnce(errorResponse);
     fetch.mockResponseOnce(response);
@@ -199,6 +206,7 @@ describe('failure path', () => {
       done();
     }, done.fail);
   });
+
   it('sends GET for the first response only with useGETForHashedQueries', done => {
     fetch.mockResponseOnce(errorResponse);
     fetch.mockResponseOnce(response);
@@ -220,6 +228,7 @@ describe('failure path', () => {
       done();
     }, done.fail);
   });
+
   it('does not try again after receiving NotSupported error', done => {
     fetch.mockResponseOnce(giveUpResponse);
     fetch.mockResponseOnce(response);
@@ -263,84 +272,8 @@ describe('failure path', () => {
       done();
     }, done.fail);
   });
-  it('handles a 500 network error and still retries', done => {
-    let failed = false;
-    fetch.mockResponseOnce(response);
 
-    // mock it again so we can verify it doesn't try anymore
-    fetch.mockResponseOnce(response);
-
-    const fetcher = (...args) => {
-      if (!failed) {
-        failed = true;
-        return Promise.resolve({
-          json: () => Promise.resolve('This will blow up'),
-          text: () => Promise.resolve('THIS WILL BLOW UP'),
-          status: 500,
-        });
-      }
-
-      return fetch(...args);
-    };
-    const link = createPersistedQuery().concat(
-      createHttpLink({ fetch: fetcher }),
-    );
-
-    execute(link, { query, variables }).subscribe(result => {
-      expect(result.data).toEqual(data);
-      const [uri, success] = fetch.mock.calls[0];
-      expect(JSON.parse(success.body).query).toBe(queryString);
-      expect(JSON.parse(success.body).extensions).toBeUndefined();
-      execute(link, { query, variables }).subscribe(secondResult => {
-        expect(secondResult.data).toEqual(data);
-
-        const [uri, success] = fetch.mock.calls[1];
-        expect(JSON.parse(success.body).query).toBe(queryString);
-        expect(JSON.parse(success.body).extensions).toBeUndefined();
-        done();
-      }, done.fail);
-    }, done.fail);
-  });
-  it('handles a 400 network error and still retries', done => {
-    let failed = false;
-    fetch.mockResponseOnce(response);
-
-    // mock it again so we can verify it doesn't try anymore
-    fetch.mockResponseOnce(response);
-
-    const fetcher = (...args) => {
-      if (!failed) {
-        failed = true;
-        return Promise.resolve({
-          json: () => Promise.resolve('This will blow up'),
-          text: () => Promise.resolve('THIS WILL BLOW UP'),
-          status: 400,
-        });
-      }
-
-      return fetch(...args);
-    };
-    const link = createPersistedQuery().concat(
-      createHttpLink({ fetch: fetcher }),
-    );
-
-    execute(link, { query, variables }).subscribe(result => {
-      expect(result.data).toEqual(data);
-      const [uri, success] = fetch.mock.calls[0];
-      expect(JSON.parse(success.body).query).toBe(queryString);
-      expect(JSON.parse(success.body).extensions).toBeUndefined();
-      execute(link, { query, variables }).subscribe(secondResult => {
-        expect(secondResult.data).toEqual(data);
-
-        const [uri, success] = fetch.mock.calls[1];
-        expect(JSON.parse(success.body).query).toBe(queryString);
-        expect(JSON.parse(success.body).extensions).toBeUndefined();
-        done();
-      }, done.fail);
-    }, done.fail);
-  });
-
-  it('only retries a 400 network error once', done => {
+  it('400 network error does not trigger a retry', done => {
     let fetchCalls = 0;
     const fetcher = (...args) => {
       fetchCalls++;
@@ -357,7 +290,30 @@ describe('failure path', () => {
     execute(link, { query, variables }).subscribe(
       result => done.fail,
       error => {
-        expect(fetchCalls).toBe(2);
+        expect(fetchCalls).toBe(1);
+        done();
+      },
+    );
+  });
+
+  it('500 network error does not trigger a retry', done => {
+    let fetchCalls = 0;
+    const fetcher = (...args) => {
+      fetchCalls++;
+      return Promise.resolve({
+        json: () => Promise.resolve('This will blow up'),
+        text: () => Promise.resolve('THIS WILL BLOW UP'),
+        status: 500,
+      });
+    };
+    const link = createPersistedQuery().concat(
+      createHttpLink({ fetch: fetcher }),
+    );
+
+    execute(link, { query, variables }).subscribe(
+      result => done.fail,
+      error => {
+        expect(fetchCalls).toBe(1);
         done();
       },
     );
