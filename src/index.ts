@@ -32,6 +32,7 @@ export const defaultGenerateHash = (query: DocumentNode): string =>
 
 const serverSupportsPersistedQueries = ({ graphQLErrors }: ErrorResponse) => {
   // if the server doesn't support persisted queries, don't try anymore
+
   if (
     graphQLErrors &&
     graphQLErrors.some(
@@ -46,10 +47,17 @@ const serverSupportsPersistedQueries = ({ graphQLErrors }: ErrorResponse) => {
 
 export const defaultOptions = {
   generateHash: defaultGenerateHash,
-  disable: ({ operation }: ErrorResponse) => {
+  disable: ({ operation, graphQLErrors }: ErrorResponse) => {
     const { response } = operation.getContext();
+
+    // if the server responds with any errors
+    if (graphQLErrors && graphQLErrors.length > 0) {
+      return true;
+    }
+
     // if the server responds with bad request
     // apollo-server responds with 400 for GET and 500 for POST when no query is found
+
     if (
       response &&
       response.status &&
